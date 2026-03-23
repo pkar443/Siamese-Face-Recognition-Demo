@@ -3,7 +3,11 @@ import random
 from datetime import datetime, timezone
 
 import cv2
+import matplotlib
 import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from runtime import configure_device
 from similarity import (
@@ -135,9 +139,20 @@ def _predict_pair_metrics(model, inputs, model_type):
     raise ValueError(f"Unsupported model type: {model_type}")
 
 
-def evaluate_pair_metrics(model, n_samples, path="eval", person_index=None, model_type=MODEL_TYPE_LEGACY):
+def sample_pair_metrics(model, n_samples, path="eval", person_index=None, model_type=MODEL_TYPE_LEGACY):
     inputs, targets = get_minibatch(n_samples, path=path, person_index=person_index)
     metric_values = _predict_pair_metrics(model, inputs, model_type)
+    return targets, metric_values
+
+
+def evaluate_pair_metrics(model, n_samples, path="eval", person_index=None, model_type=MODEL_TYPE_LEGACY):
+    targets, metric_values = sample_pair_metrics(
+        model,
+        n_samples=n_samples,
+        path=path,
+        person_index=person_index,
+        model_type=model_type,
+    )
     results = {}
     for metric_name, values in metric_values.items():
         threshold, accuracy = find_best_threshold(values, targets, metric_name)
@@ -146,6 +161,79 @@ def evaluate_pair_metrics(model, n_samples, path="eval", person_index=None, mode
             "accuracy": accuracy,
         }
     return results
+
+
+def _artifact_base_name(save_path):
+    save_path = resolve_path(save_path)
+    name = save_path.name
+    for suffix in (".weights.h5", ".h5"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return save_path.with_name(name)
+
+
+def _save_line_plot(output_path, title, xlabel, ylabel, series):
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    for label, x_values, y_values in series:
+        if x_values and y_values:
+            ax.plot(x_values, y_values, marker="o", linewidth=2, label=label)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
+    if len(series) > 1:
+        ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return str(output_path)
+
+
+def _save_loss_curve(save_path, loss_steps, train_losses, val_losses):
+    output_path = _artifact_base_name(save_path).with_name(f"{_artifact_base_name(save_path).name}_loss_curve.png")
+    return _save_line_plot(
+        output_path=output_path,
+        title="Training and Validation Loss",
+        xlabel="Iteration",
+        ylabel="Loss",
+        series=[
+            ("Train loss", loss_steps, train_losses),
+            ("Validation loss", loss_steps, val_losses),
+        ],
+    )
+
+
+def _save_accuracy_curve(save_path, accuracy_steps, accuracy_values, metric_name):
+    output_path = _artifact_base_name(save_path).with_name(f"{_artifact_base_name(save_path).name}_accuracy_curve.png")
+    return _save_line_plot(
+        output_path=output_path,
+        title=f"Validation Accuracy ({metric_name})",
+        xlabel="Iteration",
+        ylabel="Accuracy (%)",
+        series=[("Validation accuracy", accuracy_steps, accuracy_values)],
+    )
+
+
+def _save_distance_histogram(save_path, positive_distances, negative_distances):
+    output_path = _artifact_base_name(save_path).with_name(
+        f"{_artifact_base_name(save_path).name}_distance_histogram.png"
+    )
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    bins = 20
+    if len(positive_distances):
+        ax.hist(positive_distances, bins=bins, alpha=0.65, label="Same identity", color="#2563eb")
+    if len(negative_distances):
+        ax.hist(negative_distances, bins=bins, alpha=0.65, label="Different identities", color="#dc2626")
+    ax.set_title("Contrastive Pair Distance Histogram")
+    ax.set_xlabel("Euclidean distance")
+    ax.set_ylabel("Pair count")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return str(output_path)
 
 
 def test_oneshot(
@@ -283,6 +371,16 @@ def train_model(
     best_accuracy = -1.0
     best_thresholds = {checkpoint_metric: default_threshold_for(model_type, checkpoint_metric)}
     loss_history = []
+    loss_steps = []
+    train_loss_points = []
+    validation_loss_points = []
+    accuracy_steps = []
+    accuracy_points = []
+    plot_paths = {
+        "loss_curve": None,
+        "accuracy_curve": None,
+        "distance_histogram": None,
+    }
     save_path.parent.mkdir(parents=True, exist_ok=True)
 
     for step in range(iterations):
@@ -307,6 +405,9 @@ def train_model(
                 f"iteration {step}, training loss: {np.mean(loss_history):.7f}, "
                 f"validation loss: {float(validation_metrics['loss']):.7f}"
             )
+            loss_steps.append(int(step))
+            train_loss_points.append(float(np.mean(loss_history)))
+            validation_loss_points.append(float(validation_metrics["loss"]))
             loss_history.clear()
 
         if step % eval_every == 0:
@@ -325,6 +426,8 @@ def train_model(
             log(f"Validation metrics on {oneshot_n} random pairs -> " + "; ".join(metric_summary))
 
             validation_accuracy = eval_results[checkpoint_metric]["accuracy"]
+            accuracy_steps.append(int(step))
+            accuracy_points.append(float(validation_accuracy))
             if validation_accuracy >= best_accuracy:
                 model.save_weights(str(save_path))
                 best_accuracy = validation_accuracy
@@ -353,6 +456,34 @@ def train_model(
                 log(f"Saved improved weights to {save_path}")
                 log(f"Wrote model metadata to {metadata_path}")
 
+    try:
+        if loss_steps:
+            plot_paths["loss_curve"] = _save_loss_curve(save_path, loss_steps, train_loss_points, validation_loss_points)
+            log(f"Saved loss curve to {plot_paths['loss_curve']}")
+        if accuracy_steps:
+            plot_paths["accuracy_curve"] = _save_accuracy_curve(save_path, accuracy_steps, accuracy_points, checkpoint_metric)
+            log(f"Saved accuracy curve to {plot_paths['accuracy_curve']}")
+        if model_type == MODEL_TYPE_CONTRASTIVE and best_accuracy >= 0.0 and save_path.exists():
+            model.load_weights(str(save_path))
+            histogram_targets, histogram_metrics = sample_pair_metrics(
+                model,
+                n_samples=max(oneshot_n, 400),
+                path=eval_dir,
+                person_index=eval_index,
+                model_type=model_type,
+            )
+            euclidean_values = np.asarray(histogram_metrics[MODEL_METRIC_EUCLIDEAN], dtype=np.float32)
+            positive_distances = euclidean_values[np.asarray(histogram_targets) == 1]
+            negative_distances = euclidean_values[np.asarray(histogram_targets) == 0]
+            plot_paths["distance_histogram"] = _save_distance_histogram(
+                save_path,
+                positive_distances,
+                negative_distances,
+            )
+            log(f"Saved distance histogram to {plot_paths['distance_histogram']}")
+    except Exception as exc:
+        log(f"Plot generation skipped: {exc}")
+
     log(f"Best validation accuracy observed: {best_accuracy:.2f}%")
     log(
         "Recommended thresholds: "
@@ -367,6 +498,7 @@ def train_model(
         "model_type": model_type,
         "checkpoint_metric": checkpoint_metric,
         "recommended_thresholds": best_thresholds,
+        "plot_paths": plot_paths,
     }
 
 

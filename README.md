@@ -145,6 +145,7 @@ What the GUI provides:
   - `Check Dataset` to show what is currently in `train/` and `eval/`
   - `Download Full Dataset` to fetch training data from the URLs in `src/datafetch.py`
   - training controls for model type, iterations, batch size, save path, and device
+  - after training, the GUI shows `loss_curve.png` and `accuracy_curve.png`; contrastive runs also show a Euclidean distance histogram
   - optional advanced settings hidden by default
 - `Inference` tab
   - `Load / Check Model`

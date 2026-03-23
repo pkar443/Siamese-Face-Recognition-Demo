@@ -196,9 +196,18 @@ def load_model_action(model_path, device, model_type):
         return f"Model load failed: {exc}", 0.5, MODEL_METRIC_AUTO
 
 
-def run_background_job(job_fn):
+def _normalize_job_result(value, result_count):
+    if result_count == 1:
+        return (value,)
+    if isinstance(value, (tuple, list)) and len(value) == result_count:
+        return tuple(value)
+    raise ValueError(f"Expected {result_count} result values, received {value!r}")
+
+
+def run_background_job(job_fn, result_count=1, running_result=None, failed_result=None):
     if not JOB_LOCK.acquire(blocking=False):
-        yield "Another fetch/train job is already running.", "Busy"
+        running_result = running_result or tuple([None] * result_count)
+        yield ("Another fetch/train job is already running.",) + tuple(running_result)
         return
 
     logs = []
@@ -220,15 +229,16 @@ def run_background_job(job_fn):
     try:
         while thread.is_alive():
             time.sleep(0.5)
-            yield "\n".join(logs) if logs else "Working...", "Running"
+            current_logs = "\n".join(logs) if logs else "Working..."
+            yield (current_logs,) + tuple(running_result or tuple([None] * result_count))
         thread.join()
 
         if "traceback" in error:
             logs.append(error["traceback"])
-            yield "\n".join(logs), "Failed"
+            yield ("\n".join(logs),) + tuple(failed_result or tuple([None] * result_count))
             return
 
-        yield "\n".join(logs), result["value"]
+        yield ("\n".join(logs),) + _normalize_job_result(result["value"], result_count)
     finally:
         JOB_LOCK.release()
 
@@ -238,7 +248,7 @@ def fetch_data_action(train_dir, eval_dir):
         run_fetch(train_dir=train_dir, eval_dir=eval_dir, max_rows=None, log_callback=log_callback)
         return summarize_training_state(train_dir, eval_dir)
 
-    yield from run_background_job(job)
+    yield from run_background_job(job, result_count=1, running_result=("Running",), failed_result=("Failed",))
 
 
 def train_action(
@@ -280,7 +290,7 @@ def train_action(
         threshold_summary = ", ".join(
             f"{name}={value:.4f}" for name, value in result["recommended_thresholds"].items()
         )
-        return (
+        status_text = (
             f"Training finished\n"
             f"Model type: {result['model_type']}\n"
             f"Best accuracy: {result['best_accuracy']:.2f}%\n"
@@ -289,8 +299,19 @@ def train_action(
             f"Weights: {result['save_path']}\n"
             f"Device: {result['selected_device']}"
         )
+        return (
+            status_text,
+            result["plot_paths"].get("loss_curve"),
+            result["plot_paths"].get("accuracy_curve"),
+            result["plot_paths"].get("distance_histogram"),
+        )
 
-    yield from run_background_job(job)
+    yield from run_background_job(
+        job,
+        result_count=4,
+        running_result=("Running", None, None, None),
+        failed_result=("Failed", None, None, None),
+    )
 
 
 def pairwise_action(model_path, device, model_type, metric, threshold, image_left, image_right):
@@ -546,6 +567,13 @@ def build_demo():
                 train_btn = gr.Button("Start Training", variant="primary")
                 train_log = gr.Textbox(label="Training Log", lines=18)
                 train_status = gr.Textbox(label="Training Status", lines=7)
+                with gr.Row():
+                    loss_curve_plot = gr.Image(label="Loss Curve", type="filepath")
+                    accuracy_curve_plot = gr.Image(label="Accuracy Curve", type="filepath")
+                distance_histogram_plot = gr.Image(
+                    label="Contrastive Distance Histogram",
+                    type="filepath",
+                )
 
             summarize_btn.click(
                 fn=summarize_training_state,
@@ -591,7 +619,13 @@ def build_demo():
                     contrastive_margin,
                     embedding_dim,
                 ],
-                outputs=[train_log, train_status],
+                outputs=[
+                    train_log,
+                    train_status,
+                    loss_curve_plot,
+                    accuracy_curve_plot,
+                    distance_histogram_plot,
+                ],
             )
 
         with gr.Tab("Inference"):
