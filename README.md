@@ -59,31 +59,31 @@ It now includes a local GUI with:
 
 ### 1:1 Match Example
 
-![1:1 Match Example](gui_screenshot/Screenshot%202026-03-23%20190012.png)
+![1:1 Match Example](gui_screenshot/one_to_one_match.png)
 
 ### 1:N Search Example
 
-![1:N Search Example](gui_screenshot/1toN.png)
+![1:N Search Example](gui_screenshot/one_to_many_search.png)
 
 ### Contrastive Training Loss Curve
 
-![Contrastive Loss Curve](gui_screenshot/saved_best_loss_curve.png)
+![Contrastive Loss Curve](gui_screenshot/plot_contrastive_loss.png)
 
 ### Contrastive Training Accuracy Curve
 
-![Contrastive Accuracy Curve](gui_screenshot/saved_best_accuracy_curve.png)
+![Contrastive Accuracy Curve](gui_screenshot/plot_contrastive_accuracy.png)
 
 ### Contrastive Distance Histogram
 
-![Contrastive Distance Histogram](gui_screenshot/saved_best_distance_histogram.png)
+![Contrastive Distance Histogram](gui_screenshot/plot_contrastive_distance.png)
 
 ### Legacy Classifier Loss Curve
 
-![Legacy Classifier Loss Curve](gui_screenshot/saved_best_legacy_classifier_1500iter_loss_curve.png)
+![Legacy Classifier Loss Curve](gui_screenshot/plot_legacy_loss.png)
 
 ### Legacy Classifier Accuracy Curve
 
-![Legacy Classifier Accuracy Curve](gui_screenshot/saved_best_legacy_classifier_1500iter_accuracy_curve.png)
+![Legacy Classifier Accuracy Curve](gui_screenshot/plot_legacy_accuracy.png)
 
 
 ## Normal Workflow
