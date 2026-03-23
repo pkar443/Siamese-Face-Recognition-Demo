@@ -1,6 +1,6 @@
 # Siamese Face Recognition Demo
 
-Prepared for:
+Prepared By:
 
 - Dr Prakash Karn
 - University of Auckland
