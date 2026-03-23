@@ -8,6 +8,14 @@ Prepared By:
 
 This is a cleaned classroom version of Siamese Face Recognition Demo.
 
+## Shared Model Weights
+
+Pretrained classroom checkpoints for both models, along with their JSON metadata files, are available here:
+
+- [Download shared weights and JSON metadata](https://uoa-my.sharepoint.com/:f:/g/personal/pkar443_uoa_auckland_ac_nz/IgDyIl0jralQRqQ3WZ0Zm29AAZ1Hl3GkX_7RWBDR0ZHTR94?e=mdrPvc)
+
+These shared checkpoints are suitable for classroom demonstration, but they are **not the optimal final result**. The models can be trained further to achieve higher validation accuracy and better `1:1` / `1:N` performance.
+
 ## What This Project Is For
 
 This folder is a classroom demo of a Siamese neural network for face similarity.
@@ -49,6 +57,34 @@ It now includes a local GUI with:
 
 ![Inference Tab](gui_screenshot/inference.png)
 
+### 1:1 Match Example
+
+![1:1 Match Example](gui_screenshot/Screenshot%202026-03-23%20190012.png)
+
+### 1:N Search Example
+
+![1:N Search Example](gui_screenshot/1toN.png)
+
+### Contrastive Training Loss Curve
+
+![Contrastive Loss Curve](gui_screenshot/saved_best_loss_curve.png)
+
+### Contrastive Training Accuracy Curve
+
+![Contrastive Accuracy Curve](gui_screenshot/saved_best_accuracy_curve.png)
+
+### Contrastive Distance Histogram
+
+![Contrastive Distance Histogram](gui_screenshot/saved_best_distance_histogram.png)
+
+### Legacy Classifier Loss Curve
+
+![Legacy Classifier Loss Curve](gui_screenshot/saved_best_legacy_classifier_1500iter_loss_curve.png)
+
+### Legacy Classifier Accuracy Curve
+
+![Legacy Classifier Accuracy Curve](gui_screenshot/saved_best_legacy_classifier_1500iter_accuracy_curve.png)
+
 
 ## Normal Workflow
 
@@ -57,9 +93,37 @@ For most users, the intended flow is:
 1. Open the GUI with `python3 src/gui.py`
 2. In `Training`, click `Download Full Dataset`
 3. Choose `contrastive_embedding` or `legacy_classifier`
-4. Train the model and save `saved_best.weights.h5`
+4. Train the model and save an auto-named weights file
 5. In `Inference`, load the saved weights
 6. Run `1:1 Match` or `1:N Search`
+
+## Recommended Hyperparameters
+
+These are the recommended classroom settings for this PC and dataset. They are practical starting points, not guaranteed global optima.
+
+### `contrastive_embedding`
+
+- `iterations`: `2500`
+- `batch_size`: `16`
+- `positive_prob`: `0.5`
+- `loss_every`: `50`
+- `eval_every`: `100`
+- `oneshot_n`: `500`
+- `contrastive_margin`: `1.0`
+- `embedding_dim`: `256`
+- `seed`: `42`
+- `device`: `cpu`
+
+### `legacy_classifier`
+
+- `iterations`: `1000` for the first run, then resume for another `1500` if needed
+- `batch_size`: `16`
+- `positive_prob`: `0.5`
+- `loss_every`: `50`
+- `eval_every`: `100`
+- `oneshot_n`: `500`
+- `seed`: `42`
+- `device`: `cpu`
 
 ## Folder Contents
 
@@ -123,8 +187,10 @@ If you are not on a mounted drive, a normal local `.venv` is also fine.
 
 ## Important Notes
 
-- The real model weights file is not bundled.
-- After training, save weights as `saved_best.weights.h5`.
+- The real model weights file is not bundled directly in this repo.
+- Shared classroom checkpoints are available from the SharePoint link above.
+- Current shared checkpoints are useful for demonstration, but they are not the optimal final result and can be trained further for higher accuracy.
+- The training app now auto-generates checkpoint names such as `saved_best_contrastive_embedding_2500iter.weights.h5` or `saved_best_legacy_classifier_1000iter.weights.h5`.
 - Training also writes a small JSON metadata file next to the weights. The GUI uses it to auto-detect model type and recommended thresholds.
 - For lecture/demo reliability, prefer `--device cpu`.
 - TensorFlow GPU use depends on a correct CUDA/cuDNN setup. If GPU is not detected, use CPU.
@@ -160,7 +226,7 @@ Recommended classroom flow:
 1. Open the GUI.
 2. In `Training`, click `Download Full Dataset`. This automatically creates and fills `train/` and `eval/`.
 3. In `Training`, choose `contrastive_embedding` if you want the lecture-aligned metric-learning version.
-4. Train and save `saved_best.weights.h5`.
+4. Train and save the auto-generated checkpoint file.
 5. In `Inference`, load the saved weights.
 6. Use `1:1 Match` or `1:N Search`.
 
@@ -186,6 +252,8 @@ python3 src/train.py \
   --save-path saved_best.weights.h5 \
   --device cpu
 ```
+
+The `--save-path` value is treated as the base name. The training code appends model type and iteration count automatically.
 
 ### 3. Run Inference
 
