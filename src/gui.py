@@ -579,6 +579,7 @@ def build_demo():
                 fn=summarize_training_state,
                 inputs=[train_dir, eval_dir],
                 outputs=dataset_summary,
+                queue=False,
             )
 
             full_fetch_btn.click(
@@ -749,6 +750,7 @@ def build_demo():
                 fn=load_model_action,
                 inputs=[model_path, infer_device, infer_model_type],
                 outputs=[model_status, threshold, infer_metric],
+                queue=False,
             )
 
             model_path_btn.click(fn=choose_open_file_dialog, inputs=[model_path], outputs=[model_path])
@@ -772,6 +774,7 @@ def build_demo():
                 fn=preview_gallery,
                 inputs=[gallery_dir],
                 outputs=[gallery_status, gallery_preview],
+                queue=False,
             )
 
             search_btn.click(
