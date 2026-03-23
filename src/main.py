@@ -106,7 +106,7 @@ def to_rgb_image(image_bgr):
     return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
 
-def detect_faces(image, detector):
+def detect_faces(image, detector, allow_full_image_fallback=False):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     faces = detector.detectMultiScale(
         gray,
@@ -124,9 +124,25 @@ def detect_faces(image, detector):
                 "y": int(y),
                 "width": int(width),
                 "height": int(height),
+                "source": "haar",
             }
         )
-    return detections
+    if detections or not allow_full_image_fallback:
+        return detections
+
+    height, width = gray.shape[:2]
+    if height < 20 or width < 20:
+        return []
+    return [
+        {
+            "face": gray,
+            "x": 0,
+            "y": 0,
+            "width": int(width),
+            "height": int(height),
+            "source": "full_image",
+        }
+    ]
 
 
 def iter_faces(image, detector):
@@ -308,8 +324,8 @@ def compare_pair_inputs(
     left_bgr = to_bgr_image(image_left)
     right_bgr = to_bgr_image(image_right)
 
-    left_faces = detect_faces(left_bgr, detector)
-    right_faces = detect_faces(right_bgr, detector)
+    left_faces = detect_faces(left_bgr, detector, allow_full_image_fallback=True)
+    right_faces = detect_faces(right_bgr, detector, allow_full_image_fallback=True)
     if not left_faces:
         raise ValueError("No face detected in the first image.")
     if not right_faces:
@@ -355,6 +371,7 @@ def compare_pair_inputs(
         "left_face": to_rgb_image(left_face["face"]),
         "right_face": to_rgb_image(right_face["face"]),
         "face_count": (len(left_faces), len(right_faces)),
+        "detection_mode": (left_face.get("source", "haar"), right_face.get("source", "haar")),
         "probability": pair_details["metrics"][MODEL_METRIC_PROBABILITY],
         "euclidean": pair_details["metrics"][MODEL_METRIC_EUCLIDEAN],
         "cosine": pair_details["metrics"][MODEL_METRIC_COSINE],
@@ -375,7 +392,7 @@ def search_image_against_database(
     detector = build_face_detector(cascade_path)
     database_images, database_labels = load_database(database_dir)
     image_bgr = to_bgr_image(image_input)
-    detections = detect_faces(image_bgr, detector)
+    detections = detect_faces(image_bgr, detector, allow_full_image_fallback=True)
     if not detections:
         raise ValueError("No face detected in the query image.")
 

@@ -10,7 +10,14 @@ import gradio as gr
 import numpy as np
 
 from datafetch import run_fetch
-from main import compare_pair_inputs, determine_threshold, load_database, load_model, search_image_against_database
+from main import (
+    compare_pair_inputs,
+    determine_threshold,
+    load_database,
+    load_model,
+    resolve_metric,
+    search_image_against_database,
+)
 from similarity import default_metric_for_model_type
 from train import summarize_people, train_model
 from utils import (
@@ -196,6 +203,15 @@ def load_model_action(model_path, device, model_type):
         return f"Model load failed: {exc}", 0.5, MODEL_METRIC_AUTO
 
 
+def sync_threshold_to_metric(model_path, device, model_type, metric, current_threshold):
+    try:
+        _, info, _ = get_cached_model(model_path, device, model_type)
+        resolved_metric = resolve_metric(info["model_type"], metric)
+        return determine_threshold(info, resolved_metric, threshold=None)
+    except Exception:
+        return current_threshold
+
+
 def _normalize_job_result(value, result_count):
     if result_count == 1:
         return (value,)
@@ -336,6 +352,7 @@ def pairwise_action(model_path, device, model_type, metric, threshold, image_lef
         f"Cosine similarity: {format_metric_value(result['cosine'])}\n"
         f"Threshold used: {float(threshold):.4f}\n"
         f"Faces detected: left={result['face_count'][0]}, right={result['face_count'][1]}\n"
+        f"Detection mode: left={result['detection_mode'][0]}, right={result['detection_mode'][1]}\n"
         f"Model device: {info['device']}"
     )
     return (
@@ -750,6 +767,13 @@ def build_demo():
                 fn=load_model_action,
                 inputs=[model_path, infer_device, infer_model_type],
                 outputs=[model_status, threshold, infer_metric],
+                queue=False,
+            )
+
+            infer_metric.change(
+                fn=sync_threshold_to_metric,
+                inputs=[model_path, infer_device, infer_model_type, infer_metric, threshold],
+                outputs=[threshold],
                 queue=False,
             )
 

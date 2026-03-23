@@ -109,3 +109,7 @@ eval/
 outputs/
 *.weights.h5
 *.weights.h5.json
+*_loss_curve.png
+*_accuracy_curve.png
+*_distance_histogram.png
+Thumbs.db
