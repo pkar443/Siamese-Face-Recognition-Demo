@@ -19,7 +19,7 @@ from main import (
     search_image_against_database,
 )
 from similarity import default_metric_for_model_type
-from train import summarize_people, train_model
+from train import suggest_run_save_path, summarize_people, train_model
 from utils import (
     DEFAULT_DATABASE_DIR,
     DEFAULT_EVAL_DIR,
@@ -113,6 +113,18 @@ def choose_save_file_dialog(current_path):
     finally:
         root.destroy()
     return selected or str(current)
+
+
+def preview_training_save_path(current_path, model_type, iterations):
+    try:
+        return str(suggest_run_save_path(current_path, model_type=model_type, iterations=int(iterations), make_unique=True))
+    except Exception:
+        return str(current_path)
+
+
+def choose_save_file_for_training(current_path, model_type, iterations):
+    selected = choose_save_file_dialog(current_path)
+    return preview_training_save_path(selected, model_type, iterations)
 
 
 def summarize_training_state(train_dir, eval_dir):
@@ -480,11 +492,19 @@ def build_demo():
                         gr.HTML(
                             field_help_html(
                                 "Save Weights Path",
-                                "Where the best model weights will be saved. Recommended: saved_best.weights.h5",
+                                "Base filename for checkpoints. The app appends model type and iteration count automatically.",
                             )
                         )
                         with gr.Row():
-                            save_path = gr.Textbox(value=str(DEFAULT_MODEL_PATH), show_label=False, interactive=False)
+                            save_path = gr.Textbox(
+                                value=preview_training_save_path(
+                                    str(DEFAULT_MODEL_PATH),
+                                    MODEL_TYPE_CONTRASTIVE,
+                                    4000,
+                                ),
+                                show_label=False,
+                                interactive=False,
+                            )
                             save_path_btn = gr.Button("Select File")
                     with gr.Column():
                         gr.HTML(
@@ -615,8 +635,24 @@ def build_demo():
                 inputs=[eval_dir_display],
                 outputs=[eval_dir_display, eval_dir],
             )
-            save_path_btn.click(fn=choose_save_file_dialog, inputs=[save_path], outputs=[save_path])
+            save_path_btn.click(
+                fn=choose_save_file_for_training,
+                inputs=[save_path, train_model_type, iterations],
+                outputs=[save_path],
+            )
             resume_from_btn.click(fn=choose_open_file_dialog, inputs=[resume_from], outputs=[resume_from])
+            train_model_type.change(
+                fn=preview_training_save_path,
+                inputs=[save_path, train_model_type, iterations],
+                outputs=[save_path],
+                queue=False,
+            )
+            iterations.change(
+                fn=preview_training_save_path,
+                inputs=[save_path, train_model_type, iterations],
+                outputs=[save_path],
+                queue=False,
+            )
 
             train_btn.click(
                 fn=train_action,

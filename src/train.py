@@ -1,5 +1,6 @@
 import argparse
 import random
+import re
 from datetime import datetime, timezone
 
 import cv2
@@ -26,12 +27,14 @@ from utils import (
     MODEL_TYPE_CONTRASTIVE,
     MODEL_TYPE_LEGACY,
     list_image_files,
+    metadata_path_for_weights,
     read_model_metadata,
     resolve_path,
     write_model_metadata,
 )
 
 IMAGE_SHAPE = (100, 100)
+RUN_NAME_SUFFIX_PATTERN = re.compile(r"_(legacy_classifier|contrastive_embedding)_\d+iter(?:_v\d+)?$")
 
 
 def load_face_image(image_path, image_shape=IMAGE_SHAPE):
@@ -171,6 +174,25 @@ def _artifact_base_name(save_path):
             name = name[: -len(suffix)]
             break
     return save_path.with_name(name)
+
+
+def suggest_run_save_path(save_path, model_type, iterations, make_unique=True):
+    save_path = resolve_path(save_path)
+    base_path = _artifact_base_name(save_path)
+    base_name = RUN_NAME_SUFFIX_PATTERN.sub("", base_path.name)
+    candidate = save_path.with_name(f"{base_name}_{model_type}_{int(iterations)}iter.weights.h5")
+    if not make_unique:
+        return candidate
+
+    if not candidate.exists() and not metadata_path_for_weights(candidate).exists():
+        return candidate
+
+    version = 2
+    while True:
+        candidate = save_path.with_name(f"{base_name}_{model_type}_{int(iterations)}iter_v{version}.weights.h5")
+        if not candidate.exists() and not metadata_path_for_weights(candidate).exists():
+            return candidate
+        version += 1
 
 
 def _save_line_plot(output_path, title, xlabel, ylabel, series):
@@ -346,8 +368,9 @@ def train_model(
 
     train_dir = resolve_path(train_dir)
     eval_dir = resolve_path(eval_dir)
-    save_path = resolve_path(save_path)
+    save_path = suggest_run_save_path(save_path, model_type=model_type, iterations=iterations, make_unique=True)
     resume_path = resolve_path(resume_from) if resume_from else None
+    log(f"Resolved weights output path: {save_path}")
 
     train_index = build_person_index(train_dir)
     eval_index = build_person_index(eval_dir)
